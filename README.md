@@ -52,3 +52,9 @@ npm test         # runs the tests for key and link handling
 - `songs.js`: key handling, transposition and reading song names from links
 - `manifest.webmanifest`, `sw.js`, `icon.svg`: install to home screen, offline use, share menu
 - `test/`: tests
+
+## Shared band list
+
+`shared/songbook.html` is the shared version: one list for the whole band, published as a claude.ai page
+with a shared database, so everyone sees the same songs and changes appear live.
+Live page: https://claude.ai/artifact/CRzwYKe6a7xe71vx9sPx1U (bandmates need to be invited from its Share menu).

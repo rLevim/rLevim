@@ -1,0 +1,536 @@
+<title>Band Songbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;800&display=swap">
+<style>
+  /* Layout: one narrow column, like a setlist taped to the monitor. Add-song panel, then the list. */
+  :root {
+    --bg: #f6f4f0;
+    --surface: #ffffff;
+    --fg: #1e1b16;
+    --muted: #6f675b;
+    --line: #e6e0d6;
+    --accent: #b4540a;
+    --on-accent: #ffffff;
+    --accent-soft: #fbead6;
+    --danger: #b42318;
+    --font: "Rubik", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14120f; --surface: #1d1a16; --fg: #f2eee7; --muted: #a59d90; --line: #2f2a24;
+      --accent: #f2a04a; --on-accent: #1e1b16; --accent-soft: #3b2a17; --danger: #f97066;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14120f; --surface: #1d1a16; --fg: #f2eee7; --muted: #a59d90; --line: #2f2a24;
+    --accent: #f2a04a; --on-accent: #1e1b16; --accent-soft: #3b2a17; --danger: #f97066;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); font: 16px/1.45 var(--font); }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; padding-block: 0 48px; display: grid; gap: 20px; }
+
+  header.top {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+    padding: 14px 16px;
+  }
+  header.top .inner { max-width: 688px; margin: 0 auto; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  h1 { font-size: 1.3rem; font-weight: 800; margin: 0; letter-spacing: -.01em; }
+  h2 { font-size: 1.05rem; font-weight: 600; margin: 0; text-wrap: balance; }
+  .count { color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+  .live { margin-inline-start: auto; color: var(--muted); font-size: .8rem; display: inline-flex; align-items: center; gap: 6px; }
+  .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .live.on::before { background: #2f9e44; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 14px; }
+  .field { display: grid; gap: 4px; border: 0; padding: 0; margin: 0; min-width: 0; }
+  .field > span, .field > legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: 4px; }
+  input:not([type=radio]), select {
+    width: 100%; min-height: 44px; padding: 10px 12px;
+    font: inherit; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 9px;
+  }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
+
+  button {
+    font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap;
+    min-height: 44px; padding: 0 18px; border-radius: 9px;
+    border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent);
+  }
+  button.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
+  button.text { background: none; border: 0; color: var(--muted); padding: 0 8px; min-height: 36px; font-weight: 500; }
+  button.text.danger { color: var(--danger); }
+  button:disabled { opacity: .55; cursor: default; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  .keys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .keys button { padding: 0; background: var(--bg); color: var(--fg); border-color: var(--line); font-weight: 600; }
+  .keys button[aria-checked="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .mode { display: flex; gap: 18px; margin-top: 8px; }
+  .mode label { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; cursor: pointer; }
+  details summary { cursor: pointer; color: var(--muted); font-size: .9rem; padding: 4px 0; }
+  details[open] summary { margin-bottom: 10px; }
+  details > .grid2 + .field { margin-top: 12px; }
+  .hint { color: var(--muted); font-size: .9rem; margin: 0; }
+  .hint:empty { display: none; }
+
+  .tools { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+  .tools select { width: auto; }
+  @media (max-width: 480px) { .tools { grid-template-columns: 1fr 1fr; } .tools input { grid-column: 1 / -1; } .tools select { width: 100%; } }
+
+  .songs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .song {
+    display: grid; grid-template-columns: 64px 1fr; gap: 14px; align-items: center;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px;
+  }
+  .badge {
+    width: 64px; height: 64px; border-radius: 12px; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 1.55rem; font-weight: 800; letter-spacing: -.03em;
+  }
+  .song-main { min-width: 0; display: grid; gap: 2px; }
+  .song-title { font-weight: 600; font-size: 1.05rem; overflow-wrap: anywhere; }
+  .song-title a { color: inherit; text-decoration: none; }
+  .song-title a:hover { text-decoration: underline; }
+  .meta { color: var(--muted); font-size: .87rem; overflow-wrap: anywhere; }
+  .row-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin-top: 4px; margin-inline-start: -8px; }
+  a.open { color: var(--accent); font-weight: 600; text-decoration: none; padding: 0 8px; min-height: 36px; display: inline-flex; align-items: center; }
+  .confirm { display: inline-flex; align-items: center; gap: 2px; color: var(--danger); font-size: .9rem; padding-inline-start: 8px; }
+
+  .empty { text-align: center; color: var(--muted); padding: 28px 16px; border: 1px dashed var(--line); border-radius: 14px; }
+  .empty strong { display: block; color: var(--fg); font-weight: 600; margin-bottom: 4px; }
+  .notice { background: var(--accent-soft); color: var(--fg); border-radius: 12px; padding: 12px 14px; font-size: .92rem; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 12px); opacity: 0; pointer-events: none;
+    background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 999px;
+    font-size: .95rem; max-width: calc(100% - 32px); transition: opacity .2s, transform .2s;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+
+<header class="top">
+  <div class="inner">
+    <h1>Band Songbook</h1>
+    <span id="count" class="count"></span>
+    <span id="live" class="live">Connecting…</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <p id="notice" class="notice" hidden></p>
+
+  <section id="add" class="panel" aria-labelledby="add-title">
+    <h2 id="add-title">Add a song</h2>
+    <form id="song-form" autocomplete="off" style="display:grid;gap:14px">
+      <label class="field"><span>Chords link</span>
+        <input id="f-url" name="url" type="url" inputmode="url" placeholder="Paste a link to the chords" required>
+      </label>
+
+      <fieldset class="field">
+        <legend>Key we play it in</legend>
+        <div id="keys" class="keys" role="radiogroup" aria-label="Key"></div>
+        <div class="mode" role="radiogroup" aria-label="Major or minor">
+          <label><input id="f-major" type="radio" name="mode" value="" checked> Major</label>
+          <label><input id="f-minor" type="radio" name="mode" value="m"> Minor</label>
+        </div>
+      </fieldset>
+
+      <div class="grid2">
+        <label class="field"><span>Song</span><input id="f-title" name="title" dir="auto" placeholder="Filled in from the link"></label>
+        <label class="field"><span>Artist</span><input id="f-artist" name="artist" dir="auto" placeholder="Optional"></label>
+      </div>
+
+      <details id="more">
+        <summary>More: key on the chords page, capo, notes</summary>
+        <div class="grid2">
+          <label class="field"><span>Key on the chords page</span>
+            <select id="f-orig" name="originalKey"><option value="">Same / unknown</option></select>
+          </label>
+          <label class="field"><span>Capo</span><input id="f-capo" name="capo" type="number" min="0" max="12" inputmode="numeric" placeholder="None"></label>
+        </div>
+        <label class="field"><span>Notes</span><input id="f-notes" name="notes" dir="auto" placeholder="e.g. Dana sings, skip the 2nd verse"></label>
+      </details>
+
+      <p id="hint" class="hint" aria-live="polite"></p>
+      <div class="actions">
+        <button type="submit" id="save">Save song</button>
+        <button type="button" id="cancel" class="ghost" hidden>Cancel</button>
+      </div>
+    </form>
+  </section>
+
+  <section aria-labelledby="list-title" style="display:grid;gap:12px">
+    <h2 id="list-title">Songs</h2>
+    <div class="tools">
+      <input id="search" type="search" dir="auto" placeholder="Search songs, artists, keys…" aria-label="Search">
+      <select id="key-filter" aria-label="Filter by key"><option value="">All keys</option></select>
+      <select id="sort" aria-label="Sort">
+        <option value="title">A–Z</option>
+        <option value="key">By key</option>
+        <option value="recent">Newest</option>
+      </select>
+    </div>
+    <ul id="songs" class="songs"></ul>
+    <div id="empty" class="empty">
+      <strong>No songs yet</strong>
+      Paste a chords link above, tap the key you play it in, and save. Everyone in the band sees it straight away.
+    </div>
+    <div class="actions"><button type="button" id="copy" class="ghost">Copy list for the band chat</button></div>
+  </section>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  // ---------- music + link helpers ----------
+  const NOTES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+  const ALIASES = { Db: 'C#', 'D#': 'Eb', Gb: 'F#', 'G#': 'Ab', 'A#': 'Bb', Cb: 'B', Fb: 'E', 'E#': 'F', 'B#': 'C' };
+  const KEYS = [...NOTES, ...NOTES.map((n) => n + 'm')];
+
+  function parseKey(input) {
+    const m = String(input || '').trim().match(/^([A-Ga-g])\s*([#b♯♭]?)\s*(m|min|minor|maj|major)?$/i);
+    if (!m) return null;
+    let note = m[1].toUpperCase() + (m[2] === '♯' ? '#' : m[2] === '♭' ? 'b' : m[2]);
+    note = ALIASES[note] || note;
+    if (!NOTES.includes(note)) return null;
+    const q = (m[3] || '').toLowerCase();
+    return { note, minor: q === 'm' || q === 'min' || q === 'minor' };
+  }
+  function shift(from, to) {
+    const a = parseKey(from), b = parseKey(to);
+    if (!a || !b) return null;
+    let d = (NOTES.indexOf(b.note) - NOTES.indexOf(a.note) + 12) % 12;
+    return d > 6 ? d - 12 : d;
+  }
+  function describeShift(from, to) {
+    const d = shift(from, to);
+    if (d === null) return '';
+    if (d === 0) return 'Same key as the chords page';
+    const n = Math.abs(d);
+    return `Transpose ${d > 0 ? 'up' : 'down'} ${n} (${d > 0 ? '+' : '−'}${n})`;
+  }
+  // Relative major/minor, e.g. Am <-> C. Handy when the chords page lists the other one.
+  function relative(key) {
+    const k = parseKey(key);
+    if (!k) return '';
+    const i = NOTES.indexOf(k.note);
+    return k.minor ? NOTES[(i + 3) % 12] : NOTES[(i + 9) % 12] + 'm';
+  }
+
+  const SUFFIX = /[-_ ](chords?|tabs?|ukulele|bass|guitar[-_ ]pro|power|official|drums|lyrics|acoustic|ver\d*)([-_ ]\d+)*$/i;
+  const tidy = (s) => s.replace(/\.(html?|php|aspx?)$/i, '').replace(/[-_+]+/g, ' ').replace(/\s+\d+$/, '').replace(/\s+/g, ' ').trim();
+  const titleCase = (s) => s.replace(/\b[a-z][a-z']*/g, (w) => w[0].toUpperCase() + w.slice(1));
+  const decode = (s) => { try { return decodeURIComponent(s.replace(/\+/g, ' ')); } catch { return s; } };
+
+  function guessFromUrl(raw) {
+    let url;
+    try { url = new URL(String(raw).trim()); } catch { return { title: '', artist: '', source: '' }; }
+    const source = url.hostname.replace(/^(www|tabs|m)\./, '');
+    const parts = url.pathname.split('/').filter(Boolean).map(decode);
+    if (source.includes('ultimate-guitar') && parts[0] === 'tab' && parts.length >= 3) {
+      return { title: titleCase(tidy(parts[2].replace(SUFFIX, ''))), artist: titleCase(tidy(parts[1])), source };
+    }
+    if (source.includes('tab4u') && parts.length) {
+      const name = parts[parts.length - 1].replace(/\.html?$/i, '').replace(/^\d+_/, '');
+      const [artist, ...rest] = name.split('_-_');
+      return rest.length ? { title: tidy(rest.join(' - ')), artist: tidy(artist), source } : { title: tidy(name), artist: '', source };
+    }
+    const last = [...parts].reverse().find((p) => /[^\d\W_]/u.test(p)) || '';
+    const cleaned = last.replace(/\.(html?|php|aspx?)$/i, '').replace(SUFFIX, '');
+    const split = cleaned.split(/\s+-\s+|_-_/);
+    if (split.length === 2) return { title: titleCase(tidy(split[1])), artist: titleCase(tidy(split[0])), source };
+    return { title: titleCase(tidy(cleaned)), artist: '', source };
+  }
+  const extractUrl = (t) => (String(t || '').match(/https?:\/\/[^\s<>"']+/i) || [''])[0];
+
+  // Same song link -> same document, so two bandmates adding one link never duplicate it.
+  function canonicalUrl(raw) {
+    try {
+      const u = new URL(raw.trim());
+      u.hash = '';
+      for (const k of [...u.searchParams.keys()]) if (/^(utm_|fbclid|gclid|app$|ref$)/i.test(k)) u.searchParams.delete(k);
+      u.hostname = u.hostname.toLowerCase().replace(/^(www|m)\./, '');
+      return (u.hostname + u.pathname.replace(/\/+$/, '') + u.search).toLowerCase();
+    } catch { return raw.trim().toLowerCase(); }
+  }
+  function songId(url) {
+    let h = 0x811c9dc5;
+    for (const ch of canonicalUrl(url)) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; }
+    return 's-' + h.toString(16).padStart(8, '0');
+  }
+
+  // ---------- state ----------
+  const $ = (id) => document.getElementById(id);
+  let songs = [];
+  let db = null;
+  let canWrite = true;
+  let selectedNote = '';
+  let editingId = '';
+  let confirmingId = '';
+  let autoFilled = { title: '', artist: '' };
+
+  // ---------- form ----------
+  for (const note of NOTES) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = note; b.dataset.note = note;
+    b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', 'false');
+    b.addEventListener('click', () => selectNote(selectedNote === note ? '' : note));
+    $('keys').append(b);
+  }
+  for (const k of KEYS) { $('f-orig').append(new Option(k, k)); $('key-filter').append(new Option(k, k)); }
+
+  function selectNote(note) {
+    selectedNote = note;
+    for (const b of $('keys').children) b.setAttribute('aria-checked', String(b.dataset.note === note));
+    updateHint();
+  }
+  const currentKey = () => (selectedNote ? selectedNote + ($('f-minor').checked ? 'm' : '') : '');
+  function setKey(key) {
+    const k = parseKey(key);
+    selectNote(k ? k.note : '');
+    (k && k.minor ? $('f-minor') : $('f-major')).checked = true;
+    updateHint();
+  }
+  function updateHint() {
+    const o = $('f-orig').value, k = currentKey();
+    $('hint').textContent = o && k ? `From the chords page: ${describeShift(o, k)}` : '';
+  }
+
+  function onUrlInput() {
+    const input = $('f-url');
+    const found = extractUrl(input.value);
+    if (found && found !== input.value.trim()) input.value = found;
+    const g = guessFromUrl(input.value);
+    for (const f of ['title', 'artist']) {
+      const el = $('f-' + f);
+      if (g[f] && (!el.value || el.value === autoFilled[f])) el.value = g[f];
+    }
+    autoFilled = { title: g.title, artist: g.artist };
+    if (!editingId && input.value) {
+      const existing = songs.find((s) => s.id === songId(input.value));
+      if (existing) toast(`Already in the list in ${existing.key}. Saving updates it.`);
+    }
+  }
+
+  function resetForm() {
+    $('song-form').reset();
+    editingId = '';
+    autoFilled = { title: '', artist: '' };
+    selectNote('');
+    $('more').open = false;
+    $('save').textContent = 'Save song';
+    $('add-title').textContent = 'Add a song';
+    $('cancel').hidden = true;
+  }
+
+  function editSong(id) {
+    const s = songs.find((x) => x.id === id);
+    if (!s) return;
+    resetForm();
+    editingId = id;
+    $('f-url').value = s.url || '';
+    $('f-title').value = s.title || '';
+    $('f-artist').value = s.artist || '';
+    $('f-orig').value = s.originalKey || '';
+    $('f-capo').value = s.capo ?? '';
+    $('f-notes').value = s.notes || '';
+    setKey(s.key);
+    $('more').open = Boolean(s.originalKey || s.capo || s.notes);
+    $('save').textContent = 'Update song';
+    $('add-title').textContent = 'Edit song';
+    $('cancel').hidden = false;
+    $('add').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    if (!db) return toast('The shared list isn’t connected yet. Try again in a moment.');
+    const url = $('f-url').value.trim();
+    const key = currentKey();
+    if (!url) return toast('Paste a chords link first');
+    if (!key) return toast('Tap the key you play it in');
+    const g = guessFromUrl(url);
+    const id = songId(url);
+    const prev = songs.find((s) => s.id === (editingId || id));
+    const capoRaw = $('f-capo').value;
+    const doc = {
+      url, key,
+      title: $('f-title').value.trim() || g.title || url,
+      artist: $('f-artist').value.trim(),
+      originalKey: $('f-orig').value,
+      capo: capoRaw === '' ? null : Math.max(0, Math.min(12, Number(capoRaw) || 0)),
+      notes: $('f-notes').value.trim(),
+      source: g.source,
+      addedAt: prev?.addedAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+    const wasEditing = editingId;
+    $('save').disabled = true;
+    try {
+      await db.collection('songs').doc(id).set(doc);
+      // The link itself was changed while editing: drop the old entry.
+      if (wasEditing && wasEditing !== id) await db.collection('songs').doc(wasEditing).delete();
+      toast(prev ? `Updated. Now in ${key}` : `Saved in ${key}`);
+      resetForm();
+    } catch (err) {
+      handleWriteError(err);
+    } finally {
+      $('save').disabled = false;
+    }
+  }
+
+  function handleWriteError(err) {
+    if (err?.code === 'invalid_argument') { setReadOnly(); toast('You can view this list but not change it.'); }
+    else if (err?.code === 'quota_exceeded') toast('The songbook is full. Delete a few songs to add more.');
+    else toast('Couldn’t save. Check your connection and try again.');
+  }
+
+  async function deleteSong(id) {
+    try { await db.collection('songs').doc(id).delete(); toast('Deleted'); }
+    catch (err) { handleWriteError(err); }
+    confirmingId = '';
+    render();
+  }
+
+  // ---------- list ----------
+  function el(tag, props = {}, ...kids) {
+    const n = Object.assign(document.createElement(tag), props);
+    n.append(...kids.filter((k) => k !== null && k !== undefined && k !== ''));
+    return n;
+  }
+
+  function songItem(s) {
+    const metaBits = [s.artist, s.source, s.capo ? `Capo ${s.capo}` : '', s.originalKey ? describeShift(s.originalKey, s.key) : ''].filter(Boolean);
+    const actions = el('div', { className: 'row-actions' },
+      el('a', { className: 'open', href: s.url, target: '_blank', rel: 'noopener noreferrer', textContent: 'Open chords ↗' }));
+    if (canWrite) {
+      if (confirmingId === s.id) {
+        const yes = el('button', { type: 'button', className: 'text danger', textContent: 'Yes, delete' });
+        const no = el('button', { type: 'button', className: 'text', textContent: 'Keep' });
+        yes.onclick = () => deleteSong(s.id);
+        no.onclick = () => { confirmingId = ''; render(); };
+        actions.append(el('span', { className: 'confirm', textContent: 'Delete?' }), yes, no);
+      } else {
+        const edit = el('button', { type: 'button', className: 'text', textContent: 'Edit' });
+        const del = el('button', { type: 'button', className: 'text danger', textContent: 'Delete' });
+        edit.onclick = () => editSong(s.id);
+        del.onclick = () => { confirmingId = s.id; render(); };
+        actions.append(edit, del);
+      }
+    }
+    return el('li', { className: 'song' },
+      el('div', { className: 'badge', title: `Key: ${s.key} (relative ${relative(s.key)})`, textContent: s.key || '?' }),
+      el('div', { className: 'song-main' },
+        el('div', { className: 'song-title', dir: 'auto' },
+          el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', textContent: s.title })),
+        metaBits.length ? el('div', { className: 'meta', dir: 'auto', textContent: metaBits.join(' · ') }) : null,
+        s.notes ? el('div', { className: 'meta', dir: 'auto', textContent: s.notes }) : null,
+        actions));
+  }
+
+  function render() {
+    const q = $('search').value.trim().toLowerCase();
+    const kf = $('key-filter').value;
+    const sort = $('sort').value;
+    const rows = songs.filter((s) => (!kf || s.key === kf) &&
+      (!q || [s.title, s.artist, s.key, s.notes, s.source].some((v) => String(v || '').toLowerCase().includes(q))));
+    const byTitle = (a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' });
+    if (sort === 'key') rows.sort((a, b) => KEYS.indexOf(a.key) - KEYS.indexOf(b.key) || byTitle(a, b));
+    else if (sort === 'recent') rows.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    else rows.sort(byTitle);
+
+    $('songs').replaceChildren(...rows.map(songItem));
+    const empty = $('empty');
+    empty.hidden = rows.length > 0;
+    if (!songs.length) empty.firstElementChild.textContent = 'No songs yet';
+    else empty.firstElementChild.textContent = 'No songs match';
+    empty.lastChild.textContent = songs.length ? ' Try another search or key.' :
+      ' Paste a chords link above, tap the key you play it in, and save. Everyone in the band sees it straight away.';
+    $('count').textContent = songs.length ? `${songs.length} song${songs.length === 1 ? '' : 's'}` : '';
+    $('copy').hidden = !songs.length;
+  }
+
+  // ---------- band chat copy ----------
+  async function copyList() {
+    const text = [...songs].sort((a, b) => String(a.title).localeCompare(String(b.title)))
+      .map((s) => `${s.title}${s.artist ? ' – ' + s.artist : ''}: ${s.key}${s.capo ? ` (capo ${s.capo})` : ''}\n${s.url}`)
+      .join('\n\n');
+    try { await navigator.clipboard.writeText(text); toast('Copied. Paste it in the band chat.'); }
+    catch {
+      const ta = el('textarea', { value: text, readOnly: true });
+      ta.style.cssText = 'position:fixed;inset:auto 16px 80px;height:40vh;width:calc(100% - 32px);z-index:5';
+      document.body.append(ta); ta.select();
+      ta.addEventListener('blur', () => ta.remove());
+      toast('Copy the selected text');
+    }
+  }
+
+  // ---------- misc ----------
+  let toastTimer;
+  function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+  }
+  function setReadOnly() {
+    canWrite = false;
+    $('add').hidden = true;
+    $('notice').hidden = false;
+    $('notice').textContent = 'You can see the band’s songs. To add or change songs, ask whoever shared this page to give you edit access.';
+    render();
+  }
+  function setLive(text, on) { $('live').textContent = text; $('live').classList.toggle('on', on); }
+
+  $('song-form').addEventListener('submit', onSubmit);
+  $('f-url').addEventListener('input', onUrlInput);
+  $('f-orig').addEventListener('change', updateHint);
+  $('f-major').addEventListener('change', updateHint);
+  $('f-minor').addEventListener('change', updateHint);
+  $('cancel').addEventListener('click', resetForm);
+  for (const id of ['search', 'key-filter', 'sort']) $(id).addEventListener('input', render);
+  $('copy').addEventListener('click', copyList);
+  render();
+
+  // ---------- shared store ----------
+  async function connect() {
+    const api = window.claude && window.claude.use ? window.claude : null;
+    db = api ? await api.use('db') : null;
+    if (!db) {
+      setLive('Offline', false);
+      $('add').hidden = true;
+      $('notice').hidden = false;
+      $('notice').textContent = 'Sign in to claude.ai and open this page there to see and add the band’s songs.';
+      return;
+    }
+    const user = await api.use('user');
+    if (user && typeof user.can === 'function') {
+      try { if ((await user.can('data.write')) === false) setReadOnly(); } catch {}
+    }
+    const subscribe = () => db.collection('songs').onSnapshot(
+      (snap) => {
+        songs = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((s) => s.url);
+        if (confirmingId && !songs.some((s) => s.id === confirmingId)) confirmingId = '';
+        setLive('Live', true);
+        render();
+      },
+      (err) => {
+        setLive('Reconnecting…', false);
+        if (err?.code === 'unavailable') setTimeout(subscribe, 3000);
+        else if (err?.code === 'revoked') { setLive('Offline', false); setReadOnly(); }
+      });
+    subscribe();
+  }
+  connect();
+})();
+</script>
