@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Band Songbook</title>
+  <meta name="description" content="Your band's songs, chord links and the key you play them in.">
+  <meta name="theme-color" content="#1f2937">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <h1>Band Songbook</h1>
+    <span id="count" class="count"></span>
+  </header>
+
+  <main>
+    <section class="card add" aria-labelledby="add-title">
+      <h2 id="add-title">Add a song</h2>
+      <form id="song-form" autocomplete="off">
+        <input type="hidden" name="id">
+        <label class="field">
+          <span>Chords link</span>
+          <div class="row">
+            <input name="url" type="url" inputmode="url" placeholder="Paste a link to the chords" required>
+            <button type="button" id="paste-btn" class="secondary" hidden>Paste</button>
+          </div>
+        </label>
+
+        <fieldset class="field">
+          <legend>Key we play it in</legend>
+          <div id="key-picker" class="key-picker" role="radiogroup" aria-label="Key"></div>
+          <div class="mode" role="radiogroup" aria-label="Major or minor">
+            <label><input type="radio" name="mode" value="" checked> Major</label>
+            <label><input type="radio" name="mode" value="m"> Minor</label>
+          </div>
+        </fieldset>
+
+        <div class="grid2">
+          <label class="field"><span>Song</span><input name="title" dir="auto" placeholder="Filled in from the link"></label>
+          <label class="field"><span>Artist</span><input name="artist" dir="auto" placeholder="Optional"></label>
+        </div>
+
+        <details class="more">
+          <summary>More (original key, capo, notes)</summary>
+          <div class="grid2">
+            <label class="field"><span>Key on the chords page</span>
+              <select name="originalKey"><option value="">Same / unknown</option></select>
+            </label>
+            <label class="field"><span>Capo</span><input name="capo" type="number" min="0" max="12" inputmode="numeric" placeholder="None"></label>
+          </div>
+          <label class="field"><span>Notes</span><input name="notes" dir="auto" placeholder="e.g. Dana sings, skip 2nd verse"></label>
+        </details>
+
+        <p id="shift-hint" class="hint" aria-live="polite"></p>
+        <div class="actions">
+          <button type="submit" id="save-btn">Save song</button>
+          <button type="button" id="cancel-btn" class="secondary" hidden>Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <section aria-labelledby="list-title">
+      <div class="list-head">
+        <h2 id="list-title">Songs</h2>
+        <div class="tools">
+          <input id="search" type="search" placeholder="Search songs, artists, keys…" dir="auto" aria-label="Search">
+          <select id="key-filter" aria-label="Filter by key"><option value="">All keys</option></select>
+          <select id="sort" aria-label="Sort">
+            <option value="title">A–Z</option>
+            <option value="key">By key</option>
+            <option value="recent">Newest</option>
+          </select>
+        </div>
+      </div>
+      <ul id="songs" class="songs"></ul>
+      <p id="empty" class="empty" hidden>No songs yet. Paste a chords link above, pick the key and save.</p>
+    </section>
+
+    <section class="card backup" aria-labelledby="backup-title">
+      <h2 id="backup-title">Share &amp; backup</h2>
+      <p class="hint">Songs are saved in this browser. Export a file to back them up or send them to the band; import to load them on another phone.</p>
+      <div class="actions wrap">
+        <button type="button" id="copy-btn" class="secondary">Copy list as text</button>
+        <button type="button" id="export-btn" class="secondary">Export file</button>
+        <label class="button secondary">Import file<input id="import-input" type="file" accept="application/json,.json" hidden></label>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

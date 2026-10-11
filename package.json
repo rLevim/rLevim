@@ -1,0 +1,11 @@
+{
+  "name": "band-songbook",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Keep your band's songs, chord links and the key you play them in.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start": "npx --yes serve -l 8080 ."
+  }
+}
