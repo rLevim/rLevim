@@ -59,9 +59,14 @@ function titleCase(s) {
   return s.replace(/\b[a-z][a-z']*/g, (w) => w[0].toUpperCase() + w.slice(1));
 }
 
+// Some sites (Tab4u) put HTML entities like &#39; inside their links.
+function unescapeEntities(s) {
+  return s.replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+}
+
 function safeDecode(s) {
   try {
-    return decodeURIComponent(s.replace(/\+/g, ' '));
+    return unescapeEntities(decodeURIComponent(s.replace(/\+/g, ' ')));
   } catch {
     return s;
   }

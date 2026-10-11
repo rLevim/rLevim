@@ -39,6 +39,9 @@ test('guessFromUrl reads Tab4u links with Hebrew', () => {
   assert.equal(g.title, 'אני ואתה');
   assert.equal(g.artist, 'אריק איינשטיין');
   assert.equal(g.source, 'tab4u.com');
+  const apos = guessFromUrl('https://www.tab4u.com/tabs/songs/564_%D7%90%D7%9C%D7%95%D7%9F_%D7%90%D7%95%D7%9C%D7%90%D7%A8%D7%A6%26%2339%3B%D7%99%D7%A7_-_%D7%99%D7%9C%D7%93_%D7%9E%D7%96%D7%93%D7%A7%D7%9F.html#song');
+  assert.equal(apos.artist, "אלון אולארצ'יק");
+  assert.equal(apos.title, 'ילד מזדקן');
 });
 
 test('guessFromUrl falls back to the last path segment', () => {

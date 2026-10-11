@@ -30,6 +30,7 @@
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { background: var(--bg); color: var(--fg); font: 16px/1.45 var(--font); }
   .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; padding-block: 0 48px; display: grid; gap: 20px; }
 
@@ -103,6 +104,29 @@
   a.open { color: var(--accent); font-weight: 600; text-decoration: none; padding: 0 8px; min-height: 36px; display: inline-flex; align-items: center; }
   .confirm { display: inline-flex; align-items: center; gap: 2px; color: var(--danger); font-size: .9rem; padding-inline-start: 8px; }
 
+  .photo-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .photo-btn {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px;
+    border: 1px dashed var(--muted); border-radius: 9px; cursor: pointer; font-weight: 600;
+  }
+  .photo-btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .photo-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+  #photo-preview { width: 72px; height: 72px; object-fit: cover; border-radius: 9px; border: 1px solid var(--line); }
+  textarea {
+    width: 100%; min-height: 160px; padding: 10px 12px; resize: vertical;
+    font: 15px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--fg);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 9px;
+  }
+  .sheet { grid-column: 1 / -1; display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .sheet pre {
+    margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
+    font: 15px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .sheet img { max-width: 100%; max-height: 70vh; border-radius: 10px; border: 1px solid var(--line); justify-self: start; }
+  .reading::after { content: ""; display: inline-block; width: 1em; animation: dots 1.2s steps(4) infinite; text-align: left; }
+  @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+  @media (prefers-reduced-motion: reduce) { .reading::after { animation: none; content: "…"; } }
+
   .empty { text-align: center; color: var(--muted); padding: 28px 16px; border: 1px dashed var(--line); border-radius: 14px; }
   .empty strong { display: block; color: var(--fg); font-weight: 600; margin-bottom: 4px; }
   .notice { background: var(--accent-soft); color: var(--fg); border-radius: 12px; padding: 12px 14px; font-size: .92rem; }
@@ -132,8 +156,22 @@
     <h2 id="add-title">Add a song</h2>
     <form id="song-form" autocomplete="off" style="display:grid;gap:14px">
       <label class="field"><span>Chords link</span>
-        <input id="f-url" name="url" type="url" inputmode="url" placeholder="Paste a link to the chords" required>
+        <input id="f-url" name="url" type="url" inputmode="url" placeholder="Paste a link to the chords">
       </label>
+
+      <div id="photo-field" class="field" hidden>
+        <span>Or a photo from your notebook</span>
+        <div class="photo-row">
+          <label class="photo-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            <span id="photo-btn-text">Take or choose a photo</span>
+            <input id="f-photo" type="file" accept="image/*" hidden>
+          </label>
+          <img id="photo-preview" alt="Notebook photo" hidden>
+          <button type="button" id="photo-remove" class="text danger" hidden>Remove photo</button>
+        </div>
+        <p id="photo-status" class="hint" aria-live="polite"></p>
+      </div>
 
       <fieldset class="field">
         <legend>Key we play it in</legend>
@@ -159,6 +197,10 @@
         </div>
         <label class="field"><span>Notes</span><input id="f-notes" name="notes" dir="auto" placeholder="e.g. Dana sings, skip the 2nd verse"></label>
       </details>
+
+      <label id="chords-field" class="field" hidden><span>Chords (from the photo, fix anything it misread)</span>
+        <textarea id="f-chords" dir="auto" spellcheck="false"></textarea>
+      </label>
 
       <p id="hint" class="hint" aria-live="polite"></p>
       <div class="actions">
@@ -230,7 +272,9 @@
   const SUFFIX = /[-_ ](chords?|tabs?|ukulele|bass|guitar[-_ ]pro|power|official|drums|lyrics|acoustic|ver\d*)([-_ ]\d+)*$/i;
   const tidy = (s) => s.replace(/\.(html?|php|aspx?)$/i, '').replace(/[-_+]+/g, ' ').replace(/\s+\d+$/, '').replace(/\s+/g, ' ').trim();
   const titleCase = (s) => s.replace(/\b[a-z][a-z']*/g, (w) => w[0].toUpperCase() + w.slice(1));
-  const decode = (s) => { try { return decodeURIComponent(s.replace(/\+/g, ' ')); } catch { return s; } };
+  // Some sites (Tab4u) put HTML entities like &#39; inside their links.
+  const unescape = (s) => s.replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  const decode = (s) => { try { return unescape(decodeURIComponent(s.replace(/\+/g, ' '))); } catch { return s; } };
 
   function guessFromUrl(raw) {
     let url;
@@ -278,6 +322,12 @@
   let editingId = '';
   let confirmingId = '';
   let autoFilled = { title: '', artist: '' };
+  let assets = null;
+  let sampleFn = null;
+  let canReadPhotos = false;
+  let photo = null; // { blob, previewUrl } for a new photo, or { id } for the saved one
+  let readCtl = null;
+  const openSheets = new Set();
 
   // ---------- form ----------
   for (const note of NOTES) {
@@ -322,8 +372,96 @@
     }
   }
 
+  const blobUrl = (id) => '/_blob/' + id;
+
+  // Phone photos are large; a 1800px JPEG is plenty to read handwriting and keeps uploads quick.
+  async function shrink(file) {
+    const src = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+      const scale = Math.min(1, 1800 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * scale);
+      c.height = Math.round(img.naturalHeight * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.85));
+    } finally {
+      URL.revokeObjectURL(src);
+    }
+  }
+
+  function showPhoto(p) {
+    if (photo?.previewUrl) URL.revokeObjectURL(photo.previewUrl);
+    photo = p;
+    const prev = $('photo-preview');
+    prev.hidden = !p;
+    if (p) prev.src = p.previewUrl || blobUrl(p.id);
+    $('photo-remove').hidden = !p;
+    $('photo-btn-text').textContent = p ? 'Retake photo' : 'Take or choose a photo';
+    $('chords-field').hidden = !p && !$('f-chords').value;
+  }
+
+  const READ_PROMPT = `This photo is a page from a band musician's notebook with a song written out with its chords.
+The writing may be in Hebrew, English or both.
+
+Reply with only a JSON object:
+{"title": string, "artist": string, "key": string, "keyWritten": boolean, "chords": string}
+
+- title, artist: as written on the page; "" if not written. Don't guess them from the chords.
+- chords: the song as written, chords over or next to lyrics, as plain text. Keep the line breaks, the section names (Verse, Chorus, Bridge, בית, פזמון...) and repeat marks. Write chords in standard form (Am, F#m, Bb, G7, Dsus4, C/E). If a word or chord can't be read, write [?].
+- key: the key the song is played in, as one of: C C# D Eb E F F# G Ab A Bb B, with "m" added for minor (e.g. "Am", "F#m"). If the key is written on the page, use it and set keyWritten to true. Otherwise work it out from the chords (usually the first and last chord of the song) and set keyWritten to false. Use "" if you can't tell.`;
+
+  async function readPhoto(blob) {
+    readCtl?.abort();
+    readCtl = new AbortController();
+    const status = $('photo-status');
+    status.textContent = 'Reading your notebook';
+    status.classList.add('reading');
+    try {
+      const r = await sampleFn.json(READ_PROMPT, { images: [blob], signal: readCtl.signal });
+      if (!r || typeof r !== 'object') throw { code: 'invalid_json' };
+      for (const f of ['title', 'artist']) {
+        const v = typeof r[f] === 'string' ? r[f].trim() : '';
+        if (v && (!$('f-' + f).value || $('f-' + f).value === autoFilled[f])) { $('f-' + f).value = v; autoFilled[f] = v; }
+      }
+      if (typeof r.chords === 'string' && r.chords.trim() && !$('f-chords').value.trim()) $('f-chords').value = r.chords.trim();
+      $('chords-field').hidden = false;
+      const key = parseKey(r.key);
+      if (key && !selectedNote) setKey(r.key);
+      status.classList.remove('reading');
+      status.textContent = !key ? 'Done. Tap the key you play it in, check the details, and save.'
+        : r.keyWritten ? `Done. The page says ${key.note}${key.minor ? 'm' : ''}. Check the details and save.`
+        : `Done. The key isn't written, so ${key.note}${key.minor ? 'm' : ''} is a guess from the chords. Check it and save.`;
+    } catch (e) {
+      status.classList.remove('reading');
+      if (e?.code === 'cancelled') return;
+      $('chords-field').hidden = false;
+      status.textContent = e?.code === 'not_granted' ? 'Photo saved. Reading it needs your OK to use Claude, so fill in the details yourself.'
+        : e?.code === 'rate_limited' ? 'Claude is busy. Fill in the details yourself, or retake the photo in a minute.'
+        : 'Couldn’t read this photo. Fill in the details below, or try a sharper, brighter photo.';
+    }
+  }
+
+  async function onPhotoChosen(e) {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    let blob;
+    try { blob = await shrink(file); } catch { blob = null; }
+    if (!blob) return toast('That photo couldn’t be opened. Try a JPEG or PNG.');
+    showPhoto({ blob, previewUrl: URL.createObjectURL(blob) });
+    $('chords-field').hidden = false;
+    if (canReadPhotos) readPhoto(blob);
+    else $('photo-status').textContent = 'Photo added. Fill in the song details and save.';
+  }
+
   function resetForm() {
+    readCtl?.abort();
     $('song-form').reset();
+    $('f-chords').value = '';
+    $('photo-status').textContent = '';
+    $('photo-status').classList.remove('reading');
+    showPhoto(null);
     editingId = '';
     autoFilled = { title: '', artist: '' };
     selectNote('');
@@ -344,6 +482,9 @@
     $('f-orig').value = s.originalKey || '';
     $('f-capo').value = s.capo ?? '';
     $('f-notes').value = s.notes || '';
+    $('f-chords').value = s.chords || '';
+    showPhoto(s.photoId ? { id: s.photoId } : null);
+    $('chords-field').hidden = !s.photoId && !s.chords;
     setKey(s.key);
     $('more').open = Boolean(s.originalKey || s.capo || s.notes);
     $('save').textContent = 'Update song';
@@ -357,10 +498,13 @@
     if (!db) return toast('The shared list isn’t connected yet. Try again in a moment.');
     const url = $('f-url').value.trim();
     const key = currentKey();
-    if (!url) return toast('Paste a chords link first');
+    const chords = $('f-chords').value.trim();
+    if (!url && !photo && !chords) return toast('Paste a chords link or add a photo first');
     if (!key) return toast('Tap the key you play it in');
-    const g = guessFromUrl(url);
-    const id = songId(url);
+    if (!url && !$('f-title').value.trim()) return toast('Write the song name');
+    const g = url ? guessFromUrl(url) : { title: '', source: '' };
+    // Link songs are keyed by their link (no duplicates); notebook songs get their own id.
+    const id = url ? songId(url) : (editingId && !editingId.startsWith('s-') ? editingId : 'p-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
     const prev = songs.find((s) => s.id === (editingId || id));
     const capoRaw = $('f-capo').value;
     const doc = {
@@ -370,6 +514,8 @@
       originalKey: $('f-orig').value,
       capo: capoRaw === '' ? null : Math.max(0, Math.min(12, Number(capoRaw) || 0)),
       notes: $('f-notes').value.trim(),
+      chords,
+      photoId: photo?.id || null,
       source: g.source,
       addedAt: prev?.addedAt || Date.now(),
       updatedAt: Date.now(),
@@ -377,7 +523,14 @@
     const wasEditing = editingId;
     $('save').disabled = true;
     try {
+      if (photo?.blob) {
+        if (!assets) throw { code: 'no_assets' };
+        const up = await assets.upload(photo.blob, { type: 'image/jpeg' });
+        doc.photoId = up.id;
+      }
       await db.collection('songs').doc(id).set(doc);
+      // A replaced photo is no longer used by anything.
+      if (prev?.photoId && prev.photoId !== doc.photoId) assets?.delete(prev.photoId).catch(() => {});
       // The link itself was changed while editing: drop the old entry.
       if (wasEditing && wasEditing !== id) await db.collection('songs').doc(wasEditing).delete();
       toast(prev ? `Updated. Now in ${key}` : `Saved in ${key}`);
@@ -391,12 +544,19 @@
 
   function handleWriteError(err) {
     if (err?.code === 'invalid_argument') { setReadOnly(); toast('You can view this list but not change it.'); }
-    else if (err?.code === 'quota_exceeded') toast('The songbook is full. Delete a few songs to add more.');
+    else if (err?.code === 'quota_exceeded' || err?.code === 'quota_or_state') toast('The songbook is full. Delete a few songs to add more.');
+    else if (err?.code === 'too_large' || err?.code === 'unsupported_type') toast('That photo can’t be saved. Try another one.');
+    else if (err?.code === 'no_assets') toast('Photos can’t be saved from this view. Remove the photo, or open the page signed in.');
     else toast('Couldn’t save. Check your connection and try again.');
   }
 
   async function deleteSong(id) {
-    try { await db.collection('songs').doc(id).delete(); toast('Deleted'); }
+    const s = songs.find((x) => x.id === id);
+    try {
+      await db.collection('songs').doc(id).delete();
+      if (s?.photoId) assets?.delete(s.photoId).catch(() => {});
+      toast('Deleted');
+    }
     catch (err) { handleWriteError(err); }
     confirmingId = '';
     render();
@@ -411,8 +571,17 @@
 
   function songItem(s) {
     const metaBits = [s.artist, s.source, s.capo ? `Capo ${s.capo}` : '', s.originalKey ? describeShift(s.originalKey, s.key) : ''].filter(Boolean);
-    const actions = el('div', { className: 'row-actions' },
-      el('a', { className: 'open', href: s.url, target: '_blank', rel: 'noopener noreferrer', textContent: 'Open chords ↗' }));
+    const actions = el('div', { className: 'row-actions' });
+    if (s.url) actions.append(el('a', { className: 'open', href: s.url, target: '_blank', rel: 'noopener noreferrer', textContent: 'Open chords ↗' }));
+    const hasSheet = Boolean(s.chords || s.photoId);
+    const open = openSheets.has(s.id);
+    if (hasSheet) {
+      const t = el('button', { type: 'button', className: 'text', textContent: open ? 'Hide notebook' : (s.url ? 'Notebook' : 'Show chords') });
+      t.style.color = 'var(--accent)'; t.style.fontWeight = '600';
+      t.setAttribute('aria-expanded', String(open));
+      t.onclick = () => { open ? openSheets.delete(s.id) : openSheets.add(s.id); render(); };
+      actions.append(t);
+    }
     if (canWrite) {
       if (confirmingId === s.id) {
         const yes = el('button', { type: 'button', className: 'text danger', textContent: 'Yes, delete' });
@@ -428,14 +597,19 @@
         actions.append(edit, del);
       }
     }
+    const sheet = hasSheet && open ? el('div', { className: 'sheet' },
+      s.chords ? el('pre', { dir: 'auto', textContent: s.chords }) : null,
+      s.photoId ? el('a', { href: blobUrl(s.photoId), target: '_blank', rel: 'noopener noreferrer' },
+        el('img', { src: blobUrl(s.photoId), alt: `Notebook page for ${s.title}`, loading: 'lazy' })) : null) : null;
     return el('li', { className: 'song' },
       el('div', { className: 'badge', title: `Key: ${s.key} (relative ${relative(s.key)})`, textContent: s.key || '?' }),
       el('div', { className: 'song-main' },
         el('div', { className: 'song-title', dir: 'auto' },
-          el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', textContent: s.title })),
+          s.url ? el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', textContent: s.title }) : s.title),
         metaBits.length ? el('div', { className: 'meta', dir: 'auto', textContent: metaBits.join(' · ') }) : null,
         s.notes ? el('div', { className: 'meta', dir: 'auto', textContent: s.notes }) : null,
-        actions));
+        actions),
+      sheet);
   }
 
   function render() {
@@ -443,7 +617,7 @@
     const kf = $('key-filter').value;
     const sort = $('sort').value;
     const rows = songs.filter((s) => (!kf || s.key === kf) &&
-      (!q || [s.title, s.artist, s.key, s.notes, s.source].some((v) => String(v || '').toLowerCase().includes(q))));
+      (!q || [s.title, s.artist, s.key, s.notes, s.source, s.chords].some((v) => String(v || '').toLowerCase().includes(q))));
     const byTitle = (a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' });
     if (sort === 'key') rows.sort((a, b) => KEYS.indexOf(a.key) - KEYS.indexOf(b.key) || byTitle(a, b));
     else if (sort === 'recent') rows.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
@@ -463,7 +637,7 @@
   // ---------- band chat copy ----------
   async function copyList() {
     const text = [...songs].sort((a, b) => String(a.title).localeCompare(String(b.title)))
-      .map((s) => `${s.title}${s.artist ? ' – ' + s.artist : ''}: ${s.key}${s.capo ? ` (capo ${s.capo})` : ''}\n${s.url}`)
+      .map((s) => `${s.title}${s.artist ? ' – ' + s.artist : ''}: ${s.key}${s.capo ? ` (capo ${s.capo})` : ''}${s.url ? '\n' + s.url : ''}`)
       .join('\n\n');
     try { await navigator.clipboard.writeText(text); toast('Copied. Paste it in the band chat.'); }
     catch {
@@ -498,6 +672,8 @@
   $('f-major').addEventListener('change', updateHint);
   $('f-minor').addEventListener('change', updateHint);
   $('cancel').addEventListener('click', resetForm);
+  $('f-photo').addEventListener('change', onPhotoChosen);
+  $('photo-remove').addEventListener('click', () => { readCtl?.abort(); showPhoto(null); $('photo-status').textContent = ''; });
   for (const id of ['search', 'key-filter', 'sort']) $(id).addEventListener('input', render);
   $('copy').addEventListener('click', copyList);
   render();
@@ -517,9 +693,17 @@
     if (user && typeof user.can === 'function') {
       try { if ((await user.can('data.write')) === false) setReadOnly(); } catch {}
     }
+    // Photos: only people who can edit get the upload; reading them needs Claude with images.
+    assets = canWrite ? await api.use('assets') : null;
+    if (assets) {
+      sampleFn = await api.use('sample');
+      const caps = sampleFn ? await sampleFn.limits().catch(() => null) : null;
+      canReadPhotos = Boolean(caps?.images);
+      $('photo-field').hidden = false;
+    }
     const subscribe = () => db.collection('songs').onSnapshot(
       (snap) => {
-        songs = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((s) => s.url);
+        songs = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((s) => s.url || s.photoId || s.chords);
         if (confirmingId && !songs.some((s) => s.id === confirmingId)) confirmingId = '';
         setLive('Live', true);
         render();
