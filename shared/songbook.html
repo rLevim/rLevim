@@ -72,6 +72,8 @@
 
   .keys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
   .keys button { padding: 0; background: var(--bg); color: var(--fg); border-color: var(--line); font-weight: 600; }
+  .keys button.wide { grid-column: 1 / -1; font-weight: 500; }
+  .keys button.wide[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
   .keys button[aria-checked="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
   .mode { display: flex; gap: 18px; margin-top: 8px; }
   .mode label { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; cursor: pointer; }
@@ -95,6 +97,7 @@
     background: var(--accent-soft); color: var(--accent);
     font-size: 1.55rem; font-weight: 800; letter-spacing: -.03em;
   }
+  .badge.unknown { background: transparent; border: 1.5px dashed var(--line); color: var(--muted); font-size: 1.3rem; }
   .song-main { min-width: 0; display: grid; gap: 2px; }
   .song-title { font-weight: 600; font-size: 1.05rem; overflow-wrap: anywhere; }
   .song-title a { color: inherit; text-decoration: none; }
@@ -155,12 +158,17 @@
   <section id="add" class="panel" aria-labelledby="add-title">
     <h2 id="add-title">Add a song</h2>
     <form id="song-form" autocomplete="off" style="display:grid;gap:14px">
-      <label class="field"><span>Chords link</span>
+      <div class="grid2">
+        <label class="field"><span>Song</span><input id="f-title" name="title" dir="auto" placeholder="Song name"></label>
+        <label class="field"><span>Artist</span><input id="f-artist" name="artist" dir="auto" placeholder="Optional"></label>
+      </div>
+
+      <label class="field"><span>Chords link (optional)</span>
         <input id="f-url" name="url" type="url" inputmode="url" placeholder="Paste a link to the chords">
       </label>
 
       <div id="photo-field" class="field" hidden>
-        <span>Or a photo from your notebook</span>
+        <span>Or a photo from your notebook (optional)</span>
         <div class="photo-row">
           <label class="photo-btn">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
@@ -181,11 +189,6 @@
           <label><input id="f-minor" type="radio" name="mode" value="m"> Minor</label>
         </div>
       </fieldset>
-
-      <div class="grid2">
-        <label class="field"><span>Song</span><input id="f-title" name="title" dir="auto" placeholder="Filled in from the link"></label>
-        <label class="field"><span>Artist</span><input id="f-artist" name="artist" dir="auto" placeholder="Optional"></label>
-      </div>
 
       <details id="more">
         <summary>More: key on the chords page, capo, notes</summary>
@@ -224,7 +227,7 @@
     <ul id="songs" class="songs"></ul>
     <div id="empty" class="empty">
       <strong>No songs yet</strong>
-      Paste a chords link above, tap the key you play it in, and save. Everyone in the band sees it straight away.
+      Write a song name above and save. Add a chords link, a notebook photo or the key now or later. Everyone in the band sees it straight away.
     </div>
     <div class="actions"><button type="button" id="copy" class="ghost">Copy list for the band chat</button></div>
   </section>
@@ -337,6 +340,14 @@
     b.addEventListener('click', () => selectNote(selectedNote === note ? '' : note));
     $('keys').append(b);
   }
+  {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'wide'; b.textContent = 'Don’t know yet'; b.dataset.note = '';
+    b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', 'true');
+    b.addEventListener('click', () => selectNote(''));
+    $('keys').append(b);
+  }
+  $('key-filter').append(new Option('No key yet', '__none'));
   for (const k of KEYS) { $('f-orig').append(new Option(k, k)); $('key-filter').append(new Option(k, k)); }
 
   function selectNote(note) {
@@ -368,7 +379,7 @@
     autoFilled = { title: g.title, artist: g.artist };
     if (!editingId && input.value) {
       const existing = songs.find((s) => s.id === songId(input.value));
-      if (existing) toast(`Already in the list in ${existing.key}. Saving updates it.`);
+      if (existing) toast(`Already in the list${existing.key ? ' in ' + existing.key : ''}. Saving updates it.`);
     }
   }
 
@@ -499,8 +510,7 @@ Reply with only a JSON object:
     const url = $('f-url').value.trim();
     const key = currentKey();
     const chords = $('f-chords').value.trim();
-    if (!url && !photo && !chords) return toast('Paste a chords link or add a photo first');
-    if (!key) return toast('Tap the key you play it in');
+    if (!url && !photo && !chords && !$('f-title').value.trim()) return toast('Write the song name');
     if (!url && !$('f-title').value.trim()) return toast('Write the song name');
     const g = url ? guessFromUrl(url) : { title: '', source: '' };
     // Link songs are keyed by their link (no duplicates); notebook songs get their own id.
@@ -533,7 +543,7 @@ Reply with only a JSON object:
       if (prev?.photoId && prev.photoId !== doc.photoId) assets?.delete(prev.photoId).catch(() => {});
       // The link itself was changed while editing: drop the old entry.
       if (wasEditing && wasEditing !== id) await db.collection('songs').doc(wasEditing).delete();
-      toast(prev ? `Updated. Now in ${key}` : `Saved in ${key}`);
+      toast(!key ? 'Saved. Add the key when you know it.' : prev ? `Updated. Now in ${key}` : `Saved in ${key}`);
       resetForm();
     } catch (err) {
       handleWriteError(err);
@@ -602,7 +612,8 @@ Reply with only a JSON object:
       s.photoId ? el('a', { href: blobUrl(s.photoId), target: '_blank', rel: 'noopener noreferrer' },
         el('img', { src: blobUrl(s.photoId), alt: `Notebook page for ${s.title}`, loading: 'lazy' })) : null) : null;
     return el('li', { className: 'song' },
-      el('div', { className: 'badge', title: `Key: ${s.key} (relative ${relative(s.key)})`, textContent: s.key || '?' }),
+      s.key ? el('div', { className: 'badge', title: `Key: ${s.key} (relative ${relative(s.key)})`, textContent: s.key })
+        : el('div', { className: 'badge unknown', title: 'Key not decided yet', textContent: '?' }),
       el('div', { className: 'song-main' },
         el('div', { className: 'song-title', dir: 'auto' },
           s.url ? el('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', textContent: s.title }) : s.title),
@@ -616,10 +627,11 @@ Reply with only a JSON object:
     const q = $('search').value.trim().toLowerCase();
     const kf = $('key-filter').value;
     const sort = $('sort').value;
-    const rows = songs.filter((s) => (!kf || s.key === kf) &&
+    const rows = songs.filter((s) => (!kf || (kf === '__none' ? !s.key : s.key === kf)) &&
       (!q || [s.title, s.artist, s.key, s.notes, s.source, s.chords].some((v) => String(v || '').toLowerCase().includes(q))));
     const byTitle = (a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' });
-    if (sort === 'key') rows.sort((a, b) => KEYS.indexOf(a.key) - KEYS.indexOf(b.key) || byTitle(a, b));
+    const keyOrder = (s) => (s.key ? KEYS.indexOf(s.key) : KEYS.length);
+    if (sort === 'key') rows.sort((a, b) => keyOrder(a) - keyOrder(b) || byTitle(a, b));
     else if (sort === 'recent') rows.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
     else rows.sort(byTitle);
 
@@ -629,7 +641,7 @@ Reply with only a JSON object:
     if (!songs.length) empty.firstElementChild.textContent = 'No songs yet';
     else empty.firstElementChild.textContent = 'No songs match';
     empty.lastChild.textContent = songs.length ? ' Try another search or key.' :
-      ' Paste a chords link above, tap the key you play it in, and save. Everyone in the band sees it straight away.';
+      ' Write a song name above and save. Add a chords link, a notebook photo or the key now or later. Everyone in the band sees it straight away.';
     $('count').textContent = songs.length ? `${songs.length} song${songs.length === 1 ? '' : 's'}` : '';
     $('copy').hidden = !songs.length;
   }
@@ -637,7 +649,7 @@ Reply with only a JSON object:
   // ---------- band chat copy ----------
   async function copyList() {
     const text = [...songs].sort((a, b) => String(a.title).localeCompare(String(b.title)))
-      .map((s) => `${s.title}${s.artist ? ' – ' + s.artist : ''}: ${s.key}${s.capo ? ` (capo ${s.capo})` : ''}${s.url ? '\n' + s.url : ''}`)
+      .map((s) => `${s.title}${s.artist ? ' – ' + s.artist : ''}: ${s.key || 'key not set yet'}${s.capo ? ` (capo ${s.capo})` : ''}${s.url ? '\n' + s.url : ''}`)
       .join('\n\n');
     try { await navigator.clipboard.writeText(text); toast('Copied. Paste it in the band chat.'); }
     catch {
@@ -703,7 +715,7 @@ Reply with only a JSON object:
     }
     const subscribe = () => db.collection('songs').onSnapshot(
       (snap) => {
-        songs = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((s) => s.url || s.photoId || s.chords);
+        songs = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((s) => s.title || s.url || s.photoId || s.chords);
         if (confirmingId && !songs.some((s) => s.id === confirmingId)) confirmingId = '';
         setLive('Live', true);
         render();
